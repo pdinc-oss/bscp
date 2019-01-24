@@ -21,6 +21,7 @@ import hashlib
 import struct
 import subprocess
 import sys
+import os
 
 remote_script = r'''
 import hashlib
@@ -109,6 +110,11 @@ def bscp(local_filename, remote_host, remote_filename, blocksize, hashname):
         # Calculate number of blocks, including the last block which may be smaller
         blockcount = int((size + blocksize - 1) / blocksize)
 
+        if os.environ['BSCP_DEBUG'] != '':
+            m=int(blockcount/100)
+            sys.stderr.write('blockcount=%i\tblocksize=%i\tsize=%i\tblocksperdot=%i\n' % (blockcount, blocksize, size, m))
+            count=0
+
         remote_command = 'python -c "%s"' % (remote_script,)
         command = ('ssh', '--', remote_host, '--', remote_command)
         p = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
@@ -123,7 +129,14 @@ def bscp(local_filename, remote_host, remote_filename, blocksize, hashname):
             raise RuntimeError('Remote size less than local (local: %i, remote: %i)' % (size, remote_size))
         remote_digest_list = [io.read(hash_total.digestsize) for i in xrange(blockcount)]
 
+        if os.environ['BSCP_DEBUG'] != '':
+            sys.stderr.write('digestcount=%i\n' % (len(remote_digest_list)))
+
         for remote_digest in remote_digest_list:
+            if os.environ['BSCP_DEBUG'] != '':
+                count=count+1
+                if (count % m) == 0:
+                    sys.stderr.write('.')
             position = f.tell()
             block = f.read(blocksize)
             hash_total.update(block)
@@ -135,6 +148,8 @@ def bscp(local_filename, remote_host, remote_filename, blocksize, hashname):
                 except IOError:
                     break
         p.stdin.close()
+        if os.environ['BSCP_DEBUG'] != '':
+            sys.stderr.write('\n')
 
         remote_digest_total = io.read()
         p.wait()
